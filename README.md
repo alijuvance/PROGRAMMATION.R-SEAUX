@@ -12,7 +12,7 @@ This project provides a lightweight network monitoring tool built on top of [Sca
 
 ## Detection Mechanism
 
-The detection pipeline operates in three distinct phases:
+The detection pipeline operates in three distinct phases :
 
 1. **Packet Capture & Filtering:**  
    Sniffs live network traffic on the specified interface and filters for TCP packets containing strictly the `SYN` flag (`flags == "S"`).
