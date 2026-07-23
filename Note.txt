@@ -1,2 +1,9 @@
 install Npcap
+
 pip install scapy
+
+Scapy fait simplement une résolution automatique de nom de service : 
+il existe une table de correspondance standard (héritée d'Unix, fichier /etc/services,
+mais Python a son propre équivalent intégré via le module socket) qui associe des numéros de port à des noms de service connus :
+
+Installation de nmap sous Windows
