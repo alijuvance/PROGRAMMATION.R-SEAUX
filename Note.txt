@@ -7,3 +7,36 @@ il existe une table de correspondance standard (héritée d'Unix, fichier /etc/s
 mais Python a son propre équivalent intégré via le module socket) qui associe des numéros de port à des noms de service connus :
 
 Installation de nmap sous Windows
+
+Scanner le port d'un site web avec nmap :
+
+Utiliser Fing scanner reseau
+
+Point important sur ce que Fing va réellement produire
+
+Fing (comme la plupart des scanners mobiles) fait généralement un scan de type TCP Connect (poignée de main complète), pas un vrai half-open SYN scan comme nmap sur PC. Ça reste détectable par notre script, car :
+
+Le premier paquet envoyé pour chaque port testé est toujours un SYN pur (flags == "S") — c'est la norme du protocole TCP, tout scan commence forcément par ça, peu importe l'outil.
+Notre détecteur ne regarde que ce premier paquet SYN, donc ça devrait déclencher l'alerte normalement.
+
+half-open SYN scan (nmap -sS 192.168.10.113)
+
+1. Le SYN est envoyé
+2. Si le port est ouvert : le serveur répond SYN-ACK
+3. Le scanner envoie RST (Reset) au lieu de ACK
+4. Le serveur marque le port comme ouvert
+
+Le gros avantage pour l’attaquant : il n’a jamais complété la poignée de main, donc le serveur ne garde pas de trace complète de la connexion.
+
+Pourquoi ton script détecte ça ?
+Parce que pour effectuer ce scan, le scanner doit forcément commencer par envoyer un paquet SYN ( SYN scan → SYN → RST).
+Notre détecteur se base uniquement sur l’envoi de ce premier paquet SYN avec flags == "S", que ce soit un scan complet ou half-open.
+
+En résumé :
+
+Scan TCP connect complet → on voit SYN → SYN-ACK → ACK
+Scan half-open SYN → on voit SYN → SYN-ACK → RST
+Dans les deux cas, ton détecteur voit bien le SYN de départ et déclenche l’alerte sans problème.
+
+socket
+
