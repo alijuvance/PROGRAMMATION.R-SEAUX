@@ -40,3 +40,64 @@ Dans les deux cas, ton détecteur voit bien le SYN de départ et déclenche l’
 
 socket
 
+Étape 2 terminée — Détection de scan de ports validée de bout en bout
+Récapitulatif de ce que tu maîtrises maintenant :
+
+Capture réseau bas niveau (raw sockets, mode promiscuous, Npcap)
+Structure des couches Ethernet/IP/TCP
+Les flags TCP et la poignée de main (SYN, SYN-ACK, ACK, FIN)
+La technique du SYN scan (half-open) utilisée par nmap
+La conception d'une règle de détection avec fenêtre glissante et seuil
+Le debugging méthodique de trafic réseau réel
+
+
+
+Phase 1 : Comprendre ce qui se passe
+
+Ce que fait ton script
+Il capture TOUT le trafic TCP passant sur ton interface
+Quand il voit un paquet avec le flag SYN flag == "S"
+Il stocke l’IP source + port destination + timestamp
+Il nettoie les entrées trop vieilles (> 10 secondes)
+Si le nombre de ports différents scannés depuis une IP dépasse 15 en 10s → ALERTE
+
+Ce qui se passe réellement quand un scan de ports se produit
+
+Un scanner (ex: nmap) envoie des paquets SYN vers différents ports de ta machine.
+Ton script voit ces SYN et compte les ports distincts.
+
+Exemple avec nmap -p 80,443,21,22,23,20,81,82,83,84,85,86,87,88,89,90 192.168.137.1
+
+Il envoie : SYN → port 80
+Il envoie : SYN → port 443
+Il envoie : SYN → port 21
+...
+Il envoie : SYN → port 90
+
+Ton script voit ces 16 SYN, compte 16 ports distincts, et déclenche l’alerte.
+
+Le flux TCP complet d’une connexion (poignée de main)
+
+
+a poignée de main TCP normale :
+Client → SYN → Serveur
+Client ← SYN-ACK ← Serveur
+Client → ACK → Serveur   (connexion établie)
+
+Quand le serveur reçoit un SYN, il ne se contente pas de répondre — il réserve de la mémoire
+pour cette connexion en attente (une structure appelée TCB - Transmission Control Block, stockée dans une
+ile d'attente appelée backlog). Il attend ensuite l'ACK final pour finaliser.
+
+
+
+Étape 3 terminée — Détection de flood validée
+
+Récapitulatif de ce qu'on a ajouté à ta maîtrise :
+
+Compréhension du mécanisme d'attaque SYN flood (saturation de backlog)
+Distinction entre signature "diversité" (scan) et signature "volume" (flood)
+Le concept d'alert fatigue, un vrai problème de sécurité opérationnelle
+Implémentation d'un mécanisme de cooldown/throttling d'alertes
+
+
+Étape 5 — Détection d'usurpation ARP (ARP Spoofing)
