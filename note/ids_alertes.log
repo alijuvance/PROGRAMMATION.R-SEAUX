@@ -1,4 +1,9 @@
-2026-07-25 11:49:06 [INFO] Démarrage de la surveillance ARP sur Connexion au réseau local* 11
-2026-07-25 11:49:11 [INFO] Nouvelle IP apprise : 192.168.137.1 -> 9a:fe:3e:83:07:57
-2026-07-25 11:49:11 [WARNING] ALERTE ARP SPOOFING : 192.168.137.1 était connue avec la MAC 9a:fe:3e:83:07:57, mais on voit maintenant 02:11:22:33:44:55 !
-2026-07-25 21:10:05 [INFO] Nouvelle IP apprise : 192.168.137.118 -> 4a:03:6a:8b:84:1e
+2026-08-05 18:03:16 [INFO] Démarrage de l'IDS unifié sur Connexion au réseau local* 11
+2026-08-05 18:03:31 [INFO] Nouvelle IP apprise (ARP) : 192.168.137.1 -> 9a:fe:3e:83:07:57
+2026-08-05 18:03:34 [WARNING] ARP SPOOFING : 192.168.137.1 était connue avec la MAC 9a:fe:3e:83:07:57, mais on voit maintenant 02:11:22:33:44:55 !
+2026-08-05 18:07:58 [WARNING] SCAN DE PORTS suspecté depuis 192.168.137.48 (15 ports distincts en 10s)
+2026-08-05 18:09:42 [WARNING] SCAN DE PORTS suspecté depuis 192.168.137.48 (15 ports distincts en 10s)
+2026-08-05 18:11:11 [WARNING] SCAN DE PORTS suspecté depuis 192.168.137.48 (15 ports distincts en 10s)
+2026-08-05 18:13:44 [WARNING] SCAN DE PORTS suspecté depuis 192.168.137.48 (15 ports distincts en 10s)
+2026-08-05 18:14:14 [WARNING] SCAN DE PORTS suspecté depuis 192.168.137.48 (16 ports distincts en 10s)
+2026-08-05 18:15:35 [WARNING] SCAN DE PORTS suspecté depuis 192.168.137.48 (15 ports distincts en 10s)
