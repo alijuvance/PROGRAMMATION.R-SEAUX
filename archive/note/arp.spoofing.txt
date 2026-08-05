@@ -1,0 +1,34 @@
+IP et TCP — des protocoles de la couche réseau/transport
+
+ARP (Address Resolution Protocol) est différent : il opère à la frontière entre couche 2 (liaison, adresses MAC) et couche 3 (réseau, adresses IP).
+
+Ton PC diffuse en broadcast : "Qui a l'IP 192.168.137.215 ? Répondez-moi." (ARP Request)
+La machine concernée répond : "C'est moi, voici mon adresse MAC" (ARP Reply)
+Ton PC stocke cette correspondance IP↔MAC dans une table locale, la table ARP (cache), pour ne pas avoir à redemander à chaque paquet
+
+Un attaquant envoie de fausses réponses ARP du type :
+
+"192.168.137.1 (le routeur), c'est moi, voici MON adresse MAC"
+
+Toutes les machines du réseau qui reçoivent ce message vont alors, à tort, envoyer 
+leur trafic destiné au routeur... vers l'attaquant. C'est la base de l'attaque Man-in-the-Middle 
+(MITM) sur réseau local — l'attaquant s'insère au milieu de la 
+communication, peut intercepter, modifier, ou rediriger le trafic.
+
+
+Succès total ! Regarde bien la ligne clé :
+
+🚨 ALERTE ARP SPOOFING : 192.168.137.1 était connue avec la MAC 9a:fe:3e:83:07:57, mais on voit maintenant 02:11:22:33:44:55 !
+
+C'est exactement le comportement attendu : le détecteur avait mémorisé la vraie MAC (9a:fe:3e:83:07:57), a détecté le conflit dès le premier faux paquet reçu, et a levé l'alerte une seule fois (grâce au cooldown, malgré les 5 paquets envoyés).
+
+✅ Étape 5 terminée — Détection ARP Spoofing validée
+
+Récapitulatif de ce que tu maîtrises maintenant en plus :
+
+Le fonctionnement du protocole ARP (Request/Reply, résolution IP↔MAC)
+La faille structurelle d'ARP (absence d'authentification)
+Le mécanisme de l'attaque ARP Spoofing / Man-in-the-Middle
+La différence entre une détection par fenêtre glissante (fragile ici) et une détection par table de référence apprise (plus robuste, façon arpwatch)
+Comment forger et envoyer des paquets bruts avec sendp() pour du testing contrôlé
+Une bonne leçon pratique sur l'organisation de fichiers dans un vrai projet (éviter les noms ambigus/dupliqués)

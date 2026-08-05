@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDS Réseau — Dashboard</title>
+    <meta name="description" content="Dashboard temps réel pour le système de détection d'intrusion réseau">
+    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+
+    <!-- ══════════ HEADER ══════════ -->
+    <header id="main-header">
+        <div class="header-left">
+            <div class="logo">
+                <svg class="logo-svg" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" stroke="url(#grad)" fill="url(#grad-fill)"/>
+                    <defs>
+                        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#0ea5e9"/>
+                            <stop offset="100%" stop-color="#6366f1"/>
+                        </linearGradient>
+                        <linearGradient id="grad-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="rgba(14,165,233,0.15)"/>
+                            <stop offset="100%" stop-color="rgba(99,102,241,0.08)"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="logo-text">
+                    <h1>IDS RÉSEAU</h1>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inline Stats -->
+        <div class="header-stats">
+            <div class="header-stat">
+                <span class="header-stat-value" id="h-stat-total">0</span>
+                <span class="header-stat-label">INCIDENTS</span>
+            </div>
+            <div class="header-stat-divider"></div>
+            <div class="header-stat">
+                <span class="header-stat-value scan-color" id="h-stat-scans">0</span>
+                <span class="header-stat-label">SCANS</span>
+            </div>
+            <div class="header-stat-divider"></div>
+            <div class="header-stat">
+                <span class="header-stat-value flood-color" id="h-stat-floods">0</span>
+                <span class="header-stat-label">FLOODS</span>
+            </div>
+            <div class="header-stat-divider"></div>
+            <div class="header-stat">
+                <span class="header-stat-value arp-color" id="h-stat-arp">0</span>
+                <span class="header-stat-label">ARP SPOOF</span>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <div class="connection-badge" id="connection-status">
+                <span class="conn-dot"></span>
+                <span class="conn-text">CONNEXION...</span>
+            </div>
+            <div class="header-time" id="header-time">--:--:--</div>
+        </div>
+    </header>
+
+    <!-- ══════════ BENTO GRID ══════════ -->
+    <main class="bento-grid">
+
+        <!-- ── CARD: Alert Feed ── -->
+        <section class="bento-card feed-card" id="feed-card">
+            <div class="card-header">
+                <h2>Live Incident Feed</h2>
+                <div class="live-indicator">
+                    <span class="live-pulse"></span>
+                    LIVE
+                </div>
+            </div>
+            <div class="alerts-feed" id="alerts-feed">
+                <div class="empty-state" id="empty-state">
+                    <div class="scanner-anim">
+                        <div class="scanner-line"></div>
+                    </div>
+                    <p class="empty-title">Scanning network...</p>
+                    <p class="empty-sub">Waiting for suspicious activity</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── CARD: Activity Chart ── -->
+        <div class="bento-card chart-card">
+            <div class="card-header">
+                <h2>Activity Timeline</h2>
+                <span class="card-badge">30 min</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+
+        <!-- ── CARD: Distribution Donut ── -->
+        <div class="bento-card donut-card">
+            <div class="card-header">
+                <h2>Threat Distribution</h2>
+            </div>
+            <div class="donut-container">
+                <canvas id="donutChart"></canvas>
+            </div>
+            <div class="donut-legend" id="donut-legend">
+                <div class="legend-item"><span class="legend-dot scan-bg"></span>Port Scan</div>
+                <div class="legend-item"><span class="legend-dot flood-bg"></span>SYN Flood</div>
+                <div class="legend-item"><span class="legend-dot arp-bg"></span>ARP Spoof</div>
+            </div>
+        </div>
+
+        <!-- ── CARD: Top IPs ── -->
+        <div class="bento-card ips-card">
+            <div class="card-header">
+                <h2>Top Threat Sources</h2>
+            </div>
+            <div class="top-ips-list" id="top-ips-list">
+                <div class="empty-ips">No threats detected yet</div>
+            </div>
+        </div>
+
+        <!-- ── CARD: Detection Rules ── -->
+        <div class="bento-card rules-card">
+            <div class="card-header">
+                <h2>Active Rules</h2>
+            </div>
+            <div class="rules-list">
+                <div class="rule-row">
+                    <div class="rule-indicator scan-bg"></div>
+                    <div class="rule-info">
+                        <span class="rule-name">Port Scan Detection</span>
+                        <span class="rule-detail">&ge;15 distinct ports / 10s window</span>
+                    </div>
+                    <span class="rule-status active">ON</span>
+                </div>
+                <div class="rule-row">
+                    <div class="rule-indicator flood-bg"></div>
+                    <div class="rule-info">
+                        <span class="rule-name">SYN Flood Detection</span>
+                        <span class="rule-detail">&ge;50 SYN packets / 5s window</span>
+                    </div>
+                    <span class="rule-status active">ON</span>
+                </div>
+                <div class="rule-row">
+                    <div class="rule-indicator arp-bg"></div>
+                    <div class="rule-info">
+                        <span class="rule-name">ARP Spoofing Detection</span>
+                        <span class="rule-detail">MAC address change for known IP</span>
+                    </div>
+                    <span class="rule-status active">ON</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ══════════ FOOTER ══════════ -->
+    <footer>
+        <span>IDS Réseau v1.0</span>
+        <span class="footer-sep">&middot;</span>
+        <span>Projet Programmation Réseaux</span>
+    </footer>
+
+    <!-- ══════════ JAVASCRIPT ══════════ -->
+    <script>
+    (function() {
+        'use strict';
+
+        const socket = io();
+        const connDot = document.querySelector('.conn-dot');
+        const connText = document.querySelector('.conn-text');
+
+        let chartData = new Array(30).fill(0);
+        let chartLabels = [];
+        let activityChart = null;
+        let donutChart = null;
+        let localStats = { total: 0, scans: 0, floods: 0, arp_spoofing: 0 };
+
+        // ─── Chart Labels ───
+        function initChartLabels() {
+            const now = new Date();
+            chartLabels = [];
+            for (let i = 29; i >= 0; i--) {
+                const d = new Date(now.getTime() - i * 60000);
+                chartLabels.push(d.getHours().toString().padStart(2,'0') + ':' +
+                               d.getMinutes().toString().padStart(2,'0'));
+            }
+        }
+
+        // ─── Line Chart ───
+        function initLineChart() {
+            initChartLabels();
+            const ctx = document.getElementById('activityChart').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 180);
+            gradient.addColorStop(0, 'rgba(14, 165, 233, 0.2)');
+            gradient.addColorStop(1, 'rgba(14, 165, 233, 0)');
+
+            activityChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        data: chartData,
+                        borderColor: '#0ea5e9',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 3,
+                        pointHoverBackgroundColor: '#0ea5e9'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(8, 12, 21, 0.95)',
+                            titleColor: '#94a3b8',
+                            bodyColor: '#e2e8f0',
+                            borderColor: 'rgba(14,165,233,0.2)',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            titleFont: { family: 'JetBrains Mono', size: 10 },
+                            bodyFont: { family: 'JetBrains Mono', size: 12 }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#334155', maxTicksLimit: 6, font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: 'rgba(51,65,85,0.1)' }, border: { display: false } },
+                        y: { beginAtZero: true, ticks: { color: '#334155', stepSize: 1, font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: 'rgba(51,65,85,0.1)' }, border: { display: false } }
+                    },
+                    interaction: { intersect: false, mode: 'index' }
+                }
+            });
+        }
+
+        // ─── Donut Chart ───
+        function initDonutChart() {
+            const ctx = document.getElementById('donutChart').getContext('2d');
+            donutChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Port Scan', 'SYN Flood', 'ARP Spoof'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#f59e0b', '#ef4444', '#a855f7'],
+                        borderColor: 'transparent',
+                        borderWidth: 0,
+                        spacing: 3,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '72%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(8,12,21,0.95)',
+                            titleColor: '#94a3b8',
+                            bodyColor: '#e2e8f0',
+                            borderColor: 'rgba(14,165,233,0.2)',
+                            borderWidth: 1,
+                            padding: 10,
+                            bodyFont: { family: 'JetBrains Mono', size: 12 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateDonut(stats) {
+            if (!donutChart) return;
+            const s = stats.scans || 0;
+            const f = stats.floods || 0;
+            const a = stats.arp_spoofing || 0;
+            if (s + f + a === 0) {
+                donutChart.data.datasets[0].data = [1, 1, 1];
+                donutChart.data.datasets[0].backgroundColor = ['#1e293b','#1e293b','#1e293b'];
+            } else {
+                donutChart.data.datasets[0].data = [s, f, a];
+                donutChart.data.datasets[0].backgroundColor = ['#f59e0b','#ef4444','#a855f7'];
+            }
+            donutChart.update();
+        }
+
+        // ─── Animated Counter ───
+        function animateValue(el, newValue) {
+            const current = parseInt(el.textContent) || 0;
+            if (current === newValue) return;
+            const duration = 400;
+            const start = performance.now();
+            function tick(ts) {
+                const p = Math.min((ts - start) / duration, 1);
+                const eased = 1 - Math.pow(1 - p, 3);
+                el.textContent = Math.round(current + (newValue - current) * eased);
+                if (p < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function updateStats(stats) {
+            localStats = { ...stats };
+            animateValue(document.getElementById('h-stat-total'), stats.total);
+            animateValue(document.getElementById('h-stat-scans'), stats.scans);
+            animateValue(document.getElementById('h-stat-floods'), stats.floods);
+            animateValue(document.getElementById('h-stat-arp'), stats.arp_spoofing);
+            updateDonut(stats);
+        }
+
+        // ─── Alert Card ───
+        function createAlertCard(alert, animate) {
+            const div = document.createElement('div');
+            let cls = 'scan', label = 'SCAN';
+            if (alert.type === 'FLOOD') { cls = 'flood'; label = 'FLOOD'; }
+            else if (alert.type === 'ARP_SPOOF') { cls = 'arp'; label = 'ARP'; }
+
+            div.className = 'alert-row' + (animate ? ' alert-anim' : '');
+            div.innerHTML = `
+                <div class="alert-dot ${cls}-bg"></div>
+                <div class="alert-body">
+                    <div class="alert-top">
+                        <span class="alert-tag ${cls}-tag">${label}</span>
+                        <span class="alert-ts">${alert.timestamp.split(' ')[1] || alert.timestamp}</span>
+                    </div>
+                    <div class="alert-msg">${escapeHtml(alert.message)}</div>
+                    <div class="alert-src">${alert.ip}</div>
+                </div>
+            `;
+            return div;
+        }
+
+        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+        function addAlert(alert, animate) {
+            const feed = document.getElementById('alerts-feed');
+            const empty = document.getElementById('empty-state');
+            if (empty) empty.style.display = 'none';
+
+            const card = createAlertCard(alert, animate);
+            feed.insertBefore(card, feed.firstChild);
+            while (feed.children.length > 150) feed.removeChild(feed.lastChild);
+
+            if (animate) {
+                let cardId = 'feed-card';
+                const el = document.getElementById(cardId);
+                el.classList.add('card-pulse');
+                setTimeout(() => el.classList.remove('card-pulse'), 600);
+            }
+        }
+
+        // ─── Top IPs ───
+        function updateTopIPs(topIps) {
+            const c = document.getElementById('top-ips-list');
+            if (!topIps || topIps.length === 0) {
+                c.innerHTML = '<div class="empty-ips">No threats detected yet</div>';
+                return;
+            }
+            const max = topIps[0].count;
+            c.innerHTML = topIps.map((item, i) => `
+                <div class="ip-row">
+                    <span class="ip-rank">${i + 1}</span>
+                    <span class="ip-addr">${item.ip}</span>
+                    <div class="ip-bar-wrap">
+                        <div class="ip-bar-fill" style="width:${(item.count/max)*100}%"></div>
+                    </div>
+                    <span class="ip-cnt">${item.count}</span>
+                </div>
+            `).join('');
+        }
+
+        // ─── Chart Update ───
+        function updateChart() {
+            if (!activityChart) return;
+            chartData[chartData.length - 1]++;
+            activityChart.update('none');
+        }
+
+        setInterval(function() {
+            chartData.shift(); chartData.push(0);
+            const now = new Date();
+            chartLabels.shift();
+            chartLabels.push(now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0'));
+            if (activityChart) { activityChart.data.labels = chartLabels; activityChart.update('none'); }
+        }, 60000);
+
+        // ─── Clock ───
+        function tick() {
+            document.getElementById('header-time').textContent = new Date().toLocaleTimeString('fr-FR');
+        }
+        setInterval(tick, 1000); tick();
+
+        // ─── Sound ───
+        function beep() {
+            try {
+                const a = new (window.AudioContext || window.webkitAudioContext)();
+                const o = a.createOscillator(); const g = a.createGain();
+                o.connect(g); g.connect(a.destination);
+                o.frequency.setValueAtTime(700, a.currentTime);
+                o.frequency.exponentialRampToValueAtTime(350, a.currentTime + 0.12);
+                g.gain.setValueAtTime(0.06, a.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.25);
+                o.start(a.currentTime); o.stop(a.currentTime + 0.25);
+            } catch(e) {}
+        }
+
+        // ═══════════ WEBSOCKET ═══════════
+
+        socket.on('connect', function() {
+            connDot.className = 'conn-dot online';
+            connText.textContent = 'ONLINE';
+        });
+        socket.on('disconnect', function() {
+            connDot.className = 'conn-dot offline';
+            connText.textContent = 'OFFLINE';
+        });
+
+        socket.on('init', function(data) {
+            updateStats(data.stats);
+            updateTopIPs(data.top_ips);
+            if (data.alerts && data.alerts.length > 0) {
+                [...data.alerts].reverse().forEach(a => addAlert(a, false));
+                rebuildChart(data.alerts);
+            }
+        });
+
+        socket.on('new_alert', function(data) {
+            addAlert(data.alert, true);
+            updateStats(data.stats);
+            updateTopIPs(data.top_ips);
+            updateChart();
+            beep();
+        });
+
+        function rebuildChart(alerts) {
+            const now = new Date();
+            chartData = new Array(30).fill(0);
+            alerts.forEach(a => {
+                const diff = Math.floor((now - new Date(a.timestamp)) / 60000);
+                if (diff >= 0 && diff < 30) chartData[29 - diff]++;
+            });
+            if (activityChart) { activityChart.data.datasets[0].data = chartData; activityChart.update(); }
+        }
+
+        // ─── Init ───
+        initLineChart();
+        initDonutChart();
+
+    })();
+    </script>
+</body>
+</html>
