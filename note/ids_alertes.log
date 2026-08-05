@@ -1,3 +1,4 @@
 2026-07-25 11:49:06 [INFO] Démarrage de la surveillance ARP sur Connexion au réseau local* 11
 2026-07-25 11:49:11 [INFO] Nouvelle IP apprise : 192.168.137.1 -> 9a:fe:3e:83:07:57
 2026-07-25 11:49:11 [WARNING] ALERTE ARP SPOOFING : 192.168.137.1 était connue avec la MAC 9a:fe:3e:83:07:57, mais on voit maintenant 02:11:22:33:44:55 !
+2026-07-25 21:10:05 [INFO] Nouvelle IP apprise : 192.168.137.118 -> 4a:03:6a:8b:84:1e
