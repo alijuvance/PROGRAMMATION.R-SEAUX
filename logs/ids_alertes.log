@@ -11,3 +11,9 @@
 2026-08-06 09:23:58 [INFO] Démarrage de l'IDS sur \Device\NPF_{FD9923F2-A9B7-4402-B913-5EA0E8FB68CB}
 2026-08-06 09:24:10 [INFO] Nouvelle IP apprise (ARP) : 192.168.10.113 -> 18:3d:2d:ef:ce:05
 2026-08-06 09:26:34 [WARNING] ARP SPOOFING : 192.168.10.113 était connue avec la MAC 18:3d:2d:ef:ce:05, mais on voit maintenant 00:11:22:33:44:55 !
+2026-08-06 09:52:43 [INFO] Nouvelle IP apprise (ARP) : 192.168.10.1 -> e0:e1:a9:73:56:6b
+2026-08-06 11:24:07 [INFO] Démarrage de l'IDS sur \Device\NPF_{FD9923F2-A9B7-4402-B913-5EA0E8FB68CB}
+2026-08-06 11:29:06 [INFO] Nouvelle IP apprise (ARP) : 192.168.10.113 -> 00:11:22:33:44:55
+2026-08-06 11:29:06 [WARNING] ARP SPOOFING : 192.168.10.113 était connue avec la MAC 00:11:22:33:44:55, mais on voit maintenant 02:11:22:33:44:55 !
+2026-08-06 11:29:06 [INFO] Nouvelle IP apprise (ARP) : 172.20.10.4 -> 00:11:22:33:44:55
+2026-08-06 11:29:06 [WARNING] ARP SPOOFING : 172.20.10.4 était connue avec la MAC 00:11:22:33:44:55, mais on voit maintenant 02:11:22:33:44:55 !
