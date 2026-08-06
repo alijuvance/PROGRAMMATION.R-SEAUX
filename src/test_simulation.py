@@ -33,8 +33,8 @@ def simuler_scan(ip_cible, interface, nb_ports=20):
     print(f"{'-' * 50}")
     
     for port in range(1, nb_ports + 1):
-        paquet = IP(src="10.0.0.66", dst=ip_cible) / TCP(dport=port, flags="S")
-        send(paquet, verbose=False)
+        paquet = Ether(dst="ff:ff:ff:ff:ff:ff") / IP(src="10.0.0.66", dst=ip_cible) / TCP(dport=port, flags="S")
+        sendp(paquet, iface=interface, verbose=False)
         print(f"  > SYN envoye vers {ip_cible}:{port}")
         time.sleep(0.05)  # Petit délai pour simuler un vrai scan
     
@@ -56,8 +56,8 @@ def simuler_flood(ip_cible, interface, nb_paquets=60):
     print(f"{'-' * 50}")
     
     for i in range(nb_paquets):
-        paquet = IP(src="10.0.0.66", dst=ip_cible) / TCP(dport=80, flags="S")
-        send(paquet, verbose=False)
+        paquet = Ether(dst="ff:ff:ff:ff:ff:ff") / IP(src="10.0.0.66", dst=ip_cible) / TCP(dport=80, flags="S")
+        sendp(paquet, iface=interface, verbose=False)
         if (i + 1) % 10 == 0:
             print(f"  > {i + 1}/{nb_paquets} SYN envoyes...")
         time.sleep(0.02)
