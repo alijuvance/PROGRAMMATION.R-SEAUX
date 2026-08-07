@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  dashboard:
+    build: .
+    container_name: ids_dashboard
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # Note: L'IDS (src/ids_detecteur.py) doit être lancé nativement sur la machine hôte 
+  # (surtout sous Windows/Mac) car Docker ne permet pas d'écouter les interfaces réseau 
+  # physiques brutes (Wi-Fi) facilement sans un mode host sous Linux.

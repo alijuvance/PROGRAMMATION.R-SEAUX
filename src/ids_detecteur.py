@@ -1,372 +1,350 @@
 #!/usr/bin/env python3
 """
-IDS Réseau — Système de Détection d'Intrusion Léger
-====================================================
+IDS Réseau — Système de Détection d'Intrusion (Version OOP Pro)
+================================================================
 Détecte en temps réel :
   • Scan de ports (SYN scan / TCP connect)
-  • SYN Flood / DoS
+  • SYN Flood (Déni de Service TCP)
+  • ICMP Flood (Déni de Service Ping)
+  • UDP Flood (Déni de Service UDP)
   • ARP Spoofing (Man-in-the-Middle)
 
-Usage :
-  python src/ids_detecteur.py                         # Interface auto-détectée
-  python src/ids_detecteur.py -i "Wi-Fi"              # Interface spécifique
-  python src/ids_detecteur.py --list-interfaces       # Lister les interfaces
-  python src/ids_detecteur.py --seuil-scan 10         # Seuil scan personnalisé
+Usage : python src/ids_detecteur.py
 """
 
-from scapy.all import sniff, IP, TCP, ARP, get_if_list, conf
-from collections import defaultdict
-from datetime import datetime, timedelta
-import logging
-import argparse
-import json
 import os
 import sys
+import json
+import yaml
+import logging
+from datetime import datetime, timedelta
+from collections import defaultdict
+from scapy.all import sniff, IP, TCP, UDP, ICMP, ARP, wrpcap, conf
 
-# ═══════════════════════════════════════════════════════════
-#  RÉSOLUTION DES CHEMINS
-# ═══════════════════════════════════════════════════════════
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
-LOGS_DIR = os.path.join(PROJECT_DIR, "logs")
-os.makedirs(LOGS_DIR, exist_ok=True)
+# ==============================================================================
+# CONFIGURATION MANAGER
+# ==============================================================================
+class ConfigManager:
+    def __init__(self, config_file="config.yaml"):
+        self.config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), config_file)
+        self.config = self._load_config()
 
-LOG_TEXT = os.path.join(LOGS_DIR, "ids_alertes.log")
-LOG_JSON = os.path.join(LOGS_DIR, "ids_alertes.jsonl")
+    def _load_config(self):
+        if not os.path.exists(self.config_path):
+            print(f"[!] Fichier de configuration introuvable : {self.config_path}")
+            sys.exit(1)
+        with open(self.config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
 
-# ═══════════════════════════════════════════════════════════
-#  CONFIGURATION DU LOGGING — UTF-8 EXPLICITE
-# ═══════════════════════════════════════════════════════════
-logging.basicConfig(
-    filename=LOG_TEXT,
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    encoding="utf-8"
-)
+    def get_general(self, key, default=None):
+        return self.config.get("general", {}).get(key, default)
 
-# ═══════════════════════════════════════════════════════════
-#  PARAMÈTRES DE DÉTECTION (valeurs par défaut)
-# ═══════════════════════════════════════════════════════════
-FENETRE_SCAN = 10       # Fenêtre d'observation pour les scans (secondes)
-SEUIL_PORTS  = 15       # Ports distincts → alerte scan
-FENETRE_FLOOD = 5       # Fenêtre d'observation pour les floods (secondes)
-SEUIL_SYN    = 50       # Nombre de SYN → alerte flood
-COOLDOWN_ALERTE = 30    # Cooldown entre alertes du même type / même IP
+    def get_rule(self, rule_name):
+        return self.config.get("rules", {}).get(rule_name, {})
 
-# ═══════════════════════════════════════════════════════════
-#  ÉTATS INTERNES (mémoire de travail du détecteur)
-# ═══════════════════════════════════════════════════════════
-historique_scan  = defaultdict(list)   # {ip: [(port, timestamp), ...]}
-historique_flood = defaultdict(list)   # {ip: [timestamp, ...]}
-derniere_alerte_scan  = {}             # {ip: datetime}
-derniere_alerte_flood = {}             # {ip: datetime}
-table_arp_connue      = {}             # {ip: mac} — table de référence
-derniere_alerte_arp   = {}             # {ip: datetime}
+    def get_logging(self, key, default=None):
+        return self.config.get("logging", {}).get(key, default)
 
-# ═══════════════════════════════════════════════════════════
-#  COMPTEURS DE SESSION
-# ═══════════════════════════════════════════════════════════
-stats = {
-    "total": 0,
-    "scans": 0,
-    "floods": 0,
-    "arp_spoofing": 0,
-    "paquets_analyses": 0
-}
+    def get_forensics(self, key, default=None):
+        return self.config.get("forensics", {}).get(key, default)
 
+# ==============================================================================
+# ALERT & LOGGING MANAGER
+# ==============================================================================
+class AlertManager:
+    def __init__(self, config):
+        self.config = config
+        
+        # Chemins des logs
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.log_txt_path = os.path.join(project_dir, self.config.get_logging("log_file_text", "logs/ids_alertes.log"))
+        self.log_json_path = os.path.join(project_dir, self.config.get_logging("log_file_json", "logs/ids_alertes.jsonl"))
+        self.pcap_dir = os.path.join(project_dir, self.config.get_forensics("pcap_export_dir", "logs/pcap_exports"))
 
-# ───────────────────────────────────────────────────────────
-#  FONCTIONS UTILITAIRES
-# ───────────────────────────────────────────────────────────
+        # Création des dossiers si nécessaire
+        os.makedirs(os.path.dirname(self.log_txt_path), exist_ok=True)
+        os.makedirs(self.pcap_dir, exist_ok=True)
 
-def ecrire_alerte_json(type_alerte, ip, message, details=None):
-    """
-    Écrit une alerte structurée en JSON Lines (.jsonl)
-    pour consommation par le dashboard temps réel.
+        # Configuration du logging natif Python
+        logging.basicConfig(
+            filename=self.log_txt_path,
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            encoding="utf-8"
+        )
+        
+        self.stats = {
+            "total_alerts": 0,
+            "port_scan": 0,
+            "syn_flood": 0,
+            "icmp_flood": 0,
+            "udp_flood": 0,
+            "arp_spoofing": 0
+        }
 
-    Format : une ligne JSON par alerte, avec timestamp, type,
-    sévérité, IP source, message lisible, et détails techniques.
-    """
-    alerte = {
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "type": type_alerte,
-        "severity": "WARNING",
-        "ip": ip,
-        "message": message,
-        "details": details or {}
-    }
-    with open(LOG_JSON, "a", encoding="utf-8") as f:
-        f.write(json.dumps(alerte, ensure_ascii=False) + "\n")
+    def trigger_alert(self, type_alerte, ip_source, message, details=None, raw_packet=None):
+        """Déclenche une alerte (Terminal + Log texte + Log JSON + PCAP)"""
+        # 1. Terminal
+        print(f"🚨 [{type_alerte}] {message}")
+        
+        # 2. Log texte (logging)
+        logging.warning(f"[{type_alerte}] {message}")
+        
+        # 3. Log JSONL (pour le Dashboard)
+        alerte = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type": type_alerte,
+            "severity": "CRITICAL" if type_alerte == "ARP_SPOOFING" else "WARNING",
+            "ip": ip_source,
+            "message": message,
+            "details": details or {}
+        }
+        with open(self.log_json_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(alerte, ensure_ascii=False) + "\n")
+            
+        # 4. Statistiques
+        self.stats["total_alerts"] += 1
+        stat_key = type_alerte.lower()
+        if stat_key in self.stats:
+            self.stats[stat_key] += 1
+            
+        # 5. Forensique (Export PCAP)
+        if raw_packet and self.config.get_forensics("pcap_export_enabled", False):
+            self.export_pcap(type_alerte, ip_source, raw_packet)
 
+    def export_pcap(self, type_alerte, ip_source, packet):
+        """Sauvegarde le paquet malveillant pour analyse ultérieure dans Wireshark"""
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ip_safe = ip_source.replace(".", "_")
+        filename = f"{timestamp_str}_{type_alerte}_{ip_safe}.pcap"
+        filepath = os.path.join(self.pcap_dir, filename)
+        wrpcap(filepath, packet, append=True)
 
-def alerter(message, type_alerte="SCAN", ip="unknown", details=None, niveau="warning"):
-    """
-    Point d'entrée centralisé pour toute alerte :
-    1. Affiche dans le terminal (avec emoji 🚨)
-    2. Écrit dans le log texte (ids_alertes.log)
-    3. Écrit dans le log JSON (ids_alertes.jsonl)
-    4. Incrémente les compteurs de session
-    """
-    print(f"🚨 {message}")
-    if niveau == "warning":
-        logging.warning(message)
-    else:
-        logging.info(message)
-    ecrire_alerte_json(type_alerte, ip, message, details)
-    stats["total"] += 1
-
-
-def nettoyer(liste, fenetre):
-    """
-    Supprime les entrées plus vieilles que la fenêtre temporelle.
-    
-    Gère deux formats :
-    - Tuples (port, timestamp) pour l'historique scan
-    - Timestamps simples pour l'historique flood
-    
-    C'est le cœur de l'algorithme à fenêtre glissante :
-    on ne garde que les événements récents pour l'analyse.
-    """
-    limite = datetime.now() - timedelta(seconds=fenetre)
-    return [t for t in liste if (t[1] if isinstance(t, tuple) else t) > limite]
-
-
-# ───────────────────────────────────────────────────────────
-#  DÉTECTION : SCAN DE PORTS
-# ───────────────────────────────────────────────────────────
-
-def detecter_scan(ip):
-    """
-    Détecte un scan de ports par la DIVERSITÉ des ports ciblés.
-    
-    Signature : une IP contacte de nombreux ports distincts
-    dans une courte fenêtre temporelle → reconnaissance réseau.
-    
-    Algorithme :
-    1. Extraire les ports uniques depuis l'historique (set)
-    2. Comparer la cardinalité au seuil
-    3. Vérifier le cooldown pour éviter le spam d'alertes
-    """
-    ports_distincts = {port for (port, t) in historique_scan[ip]}
-    if len(ports_distincts) >= SEUIL_PORTS:
-        maintenant = datetime.now()
-        derniere = derniere_alerte_scan.get(ip)
-        if derniere is None or (maintenant - derniere).total_seconds() > COOLDOWN_ALERTE:
-            alerter(
-                f"SCAN DE PORTS suspecté depuis {ip} "
-                f"({len(ports_distincts)} ports distincts en {FENETRE_SCAN}s)",
-                type_alerte="SCAN", ip=ip,
-                details={"ports_count": len(ports_distincts), "window": FENETRE_SCAN}
-            )
-            stats["scans"] += 1
-            derniere_alerte_scan[ip] = maintenant
-
-
-# ───────────────────────────────────────────────────────────
-#  DÉTECTION : SYN FLOOD / DoS
-# ───────────────────────────────────────────────────────────
-
-def detecter_flood(ip):
-    """
-    Détecte un SYN flood par le VOLUME de paquets SYN.
-    
-    Signature : une IP envoie un grand nombre de SYN
-    en très peu de temps → tentative de saturation du backlog TCP.
-    
-    Différence avec le scan :
-    - Scan = diversité de ports (beaucoup de ports différents)
-    - Flood = volume brut (beaucoup de SYN, même sur peu de ports)
-    """
-    if len(historique_flood[ip]) >= SEUIL_SYN:
-        maintenant = datetime.now()
-        derniere = derniere_alerte_flood.get(ip)
-        if derniere is None or (maintenant - derniere).total_seconds() > COOLDOWN_ALERTE:
-            alerter(
-                f"SYN FLOOD / DoS suspecté depuis {ip} "
-                f"({len(historique_flood[ip])} SYN en {FENETRE_FLOOD}s)",
-                type_alerte="FLOOD", ip=ip,
-                details={"syn_count": len(historique_flood[ip]), "window": FENETRE_FLOOD}
-            )
-            stats["floods"] += 1
-            derniere_alerte_flood[ip] = maintenant
-
-
-# ───────────────────────────────────────────────────────────
-#  DÉTECTION : ARP SPOOFING
-# ───────────────────────────────────────────────────────────
-
-def detecter_arp_spoofing(ip, nouvelle_mac):
-    """
-    Détecte un changement de MAC pour une IP déjà connue.
-    
-    Principe (inspiré d'arpwatch) :
-    1. On apprend les correspondances IP↔MAC au fil du temps
-    2. Si une IP connue annonce soudain une MAC différente
-       → possible ARP spoofing / Man-in-the-Middle
-    
-    Faille exploitée : ARP ne possède aucun mécanisme
-    d'authentification — n'importe qui peut envoyer des
-    ARP Reply avec de fausses informations.
-    """
-    if ip in table_arp_connue:
-        mac_connue = table_arp_connue[ip]
-        if mac_connue != nouvelle_mac:
-            maintenant = datetime.now()
-            derniere = derniere_alerte_arp.get(ip)
-            if derniere is None or (maintenant - derniere).total_seconds() > COOLDOWN_ALERTE:
-                alerter(
-                    f"ARP SPOOFING : {ip} était connue avec la MAC {mac_connue}, "
-                    f"mais on voit maintenant {nouvelle_mac} !",
-                    type_alerte="ARP_SPOOF", ip=ip,
-                    details={"mac_connue": mac_connue, "mac_nouvelle": nouvelle_mac}
-                )
-                stats["arp_spoofing"] += 1
-                derniere_alerte_arp[ip] = maintenant
-    else:
-        # Première fois qu'on voit cette IP → on l'apprend
-        table_arp_connue[ip] = nouvelle_mac
-        message = f"Nouvelle IP apprise (ARP) : {ip} -> {nouvelle_mac}"
+    def log_info(self, message):
+        """Log informatif standard"""
         print(f"[INFO] {message}")
         logging.info(message)
 
 
-# ───────────────────────────────────────────────────────────
-#  ANALYSE PRINCIPALE DE CHAQUE PAQUET
-# ───────────────────────────────────────────────────────────
+# ==============================================================================
+# RULE ENGINE (Moteur de Détection)
+# ==============================================================================
+class RuleEngine:
+    def __init__(self, config, alert_manager):
+        self.config = config
+        self.alert_manager = alert_manager
+        
+        # Paramètres
+        self.cooldown = self.config.get_general("cooldown_alerte", 30)
+        
+        # Règles
+        self.rule_scan = self.config.get_rule("port_scan")
+        self.rule_syn = self.config.get_rule("syn_flood")
+        self.rule_icmp = self.config.get_rule("icmp_flood")
+        self.rule_udp = self.config.get_rule("udp_flood")
+        self.rule_arp = self.config.get_rule("arp_spoofing")
 
-def analyser_paquet(paquet):
-    """
-    Point d'entrée appelé par Scapy pour chaque paquet capturé.
-    
-    Deux branches :
-    - TCP (couche 4) : détection scan + flood via le flag SYN
-    - ARP (couche 2-3) : détection spoofing via les Reply
-    """
-    stats["paquets_analyses"] += 1
+        # États internes (Mémoire)
+        self.history_scan = defaultdict(list)   # {ip: [(port, timestamp)]}
+        self.history_syn = defaultdict(list)    # {ip: [timestamp]}
+        self.history_icmp = defaultdict(list)   # {ip: [timestamp]}
+        self.history_udp = defaultdict(list)    # {ip: [timestamp]}
+        
+        self.last_alerts = {}                   # {"TYPE_IP": datetime}
+        self.arp_table = {}                     # {ip: mac}
 
-    # ─── Branche TCP : scan + flood ───
-    if paquet.haslayer(IP) and paquet.haslayer(TCP):
-        if paquet[TCP].flags == "S":  # Flag SYN uniquement
-            ip_src = paquet[IP].src
-            port_dst = paquet[TCP].dport
-            maintenant = datetime.now()
+    def _can_alert(self, alert_key):
+        """Vérifie si le cooldown est passé pour ce type d'alerte et cette IP"""
+        last_time = self.last_alerts.get(alert_key)
+        if last_time is None or (datetime.now() - last_time).total_seconds() > self.cooldown:
+            self.last_alerts[alert_key] = datetime.now()
+            return True
+        return False
 
-            # Enregistrer pour détection de scan (port + timestamp)
-            historique_scan[ip_src].append((port_dst, maintenant))
-            historique_scan[ip_src] = nettoyer(historique_scan[ip_src], FENETRE_SCAN)
-            detecter_scan(ip_src)
+    def _clean_history(self, history_list, window_seconds):
+        """Garde uniquement les événements récents (fenêtre glissante)"""
+        limit = datetime.now() - timedelta(seconds=window_seconds)
+        return [t for t in history_list if (t[1] if isinstance(t, tuple) else t) > limit]
 
-            # Enregistrer pour détection de flood (timestamp seul)
-            historique_flood[ip_src].append(maintenant)
-            historique_flood[ip_src] = nettoyer(historique_flood[ip_src], FENETRE_FLOOD)
-            detecter_flood(ip_src)
+    def analyze_packet(self, packet):
+        """Point d'entrée pour l'analyse de chaque paquet capturé"""
+        try:
+            # 1. Détection ARP
+            if self.rule_arp.get("enabled", True) and packet.haslayer(ARP):
+                self._check_arp(packet)
+                
+            # 2. Détections IP (TCP, UDP, ICMP)
+            if packet.haslayer(IP):
+                ip_src = packet[IP].src
+                
+                # Scan de ports & SYN Flood (TCP)
+                if packet.haslayer(TCP) and packet[TCP].flags == "S":
+                    if self.rule_scan.get("enabled", True):
+                        self._check_port_scan(ip_src, packet[TCP].dport, packet)
+                    if self.rule_syn.get("enabled", True):
+                        self._check_syn_flood(ip_src, packet)
+                        
+                # ICMP Ping Flood
+                if packet.haslayer(ICMP) and packet[ICMP].type == 8: # Echo request
+                    if self.rule_icmp.get("enabled", True):
+                        self._check_icmp_flood(ip_src, packet)
+                        
+                # UDP Flood
+                if packet.haslayer(UDP):
+                    if self.rule_udp.get("enabled", True):
+                        self._check_udp_flood(ip_src, packet)
+        except Exception as e:
+            # Capturer les erreurs silencieusement pour ne pas planter le sniffer
+            logging.error(f"Erreur d'analyse de paquet: {e}")
 
-    # ─── Branche ARP : spoofing ───
-    elif paquet.haslayer(ARP):
-        if paquet[ARP].op == 2:  # op=2 → ARP Reply uniquement
-            ip_annoncee = paquet[ARP].psrc
-            mac_annoncee = paquet[ARP].hwsrc
-            detecter_arp_spoofing(ip_annoncee, mac_annoncee)
+    def _check_port_scan(self, ip_src, dport, packet):
+        window = self.rule_scan.get("window_seconds", 10)
+        threshold = self.rule_scan.get("threshold_distinct_ports", 15)
+        
+        self.history_scan[ip_src].append((dport, datetime.now()))
+        self.history_scan[ip_src] = self._clean_history(self.history_scan[ip_src], window)
+        
+        distinct_ports = {p for (p, t) in self.history_scan[ip_src]}
+        if len(distinct_ports) >= threshold:
+            if self._can_alert(f"SCAN_{ip_src}"):
+                self.alert_manager.trigger_alert(
+                    "PORT_SCAN", ip_src,
+                    f"SCAN DE PORTS suspecté ({len(distinct_ports)} ports en {window}s)",
+                    {"ports_count": len(distinct_ports)}, packet
+                )
+
+    def _check_syn_flood(self, ip_src, packet):
+        window = self.rule_syn.get("window_seconds", 5)
+        threshold = self.rule_syn.get("threshold_syn_count", 50)
+        
+        self.history_syn[ip_src].append(datetime.now())
+        self.history_syn[ip_src] = self._clean_history(self.history_syn[ip_src], window)
+        
+        if len(self.history_syn[ip_src]) >= threshold:
+            if self._can_alert(f"SYN_{ip_src}"):
+                self.alert_manager.trigger_alert(
+                    "SYN_FLOOD", ip_src,
+                    f"SYN FLOOD suspecté ({len(self.history_syn[ip_src])} SYN en {window}s)",
+                    {"syn_count": len(self.history_syn[ip_src])}, packet
+                )
+
+    def _check_icmp_flood(self, ip_src, packet):
+        window = self.rule_icmp.get("window_seconds", 5)
+        threshold = self.rule_icmp.get("threshold_ping_count", 50)
+        
+        self.history_icmp[ip_src].append(datetime.now())
+        self.history_icmp[ip_src] = self._clean_history(self.history_icmp[ip_src], window)
+        
+        if len(self.history_icmp[ip_src]) >= threshold:
+            if self._can_alert(f"ICMP_{ip_src}"):
+                self.alert_manager.trigger_alert(
+                    "ICMP_FLOOD", ip_src,
+                    f"PING FLOOD suspecté ({len(self.history_icmp[ip_src])} Pings en {window}s)",
+                    {"ping_count": len(self.history_icmp[ip_src])}, packet
+                )
+
+    def _check_udp_flood(self, ip_src, packet):
+        window = self.rule_udp.get("window_seconds", 5)
+        threshold = self.rule_udp.get("threshold_udp_count", 100)
+        
+        self.history_udp[ip_src].append(datetime.now())
+        self.history_udp[ip_src] = self._clean_history(self.history_udp[ip_src], window)
+        
+        if len(self.history_udp[ip_src]) >= threshold:
+            if self._can_alert(f"UDP_{ip_src}"):
+                self.alert_manager.trigger_alert(
+                    "UDP_FLOOD", ip_src,
+                    f"UDP FLOOD suspecté ({len(self.history_udp[ip_src])} paquets UDP en {window}s)",
+                    {"udp_count": len(self.history_udp[ip_src])}, packet
+                )
+
+    def _check_arp(self, packet):
+        if packet.op in (1, 2):  # ARP Request ou Reply
+            ip_src = packet.psrc
+            mac_src = packet.hwsrc
+            
+            if ip_src in self.arp_table:
+                if self.arp_table[ip_src] != mac_src:
+                    if self._can_alert(f"ARP_{ip_src}"):
+                        self.alert_manager.trigger_alert(
+                            "ARP_SPOOFING", ip_src,
+                            f"Usurpation ARP : L'IP {ip_src} a changé de MAC ({self.arp_table[ip_src]} -> {mac_src})",
+                            {"old_mac": self.arp_table[ip_src], "new_mac": mac_src}, packet
+                        )
+            else:
+                self.arp_table[ip_src] = mac_src
+                self.alert_manager.log_info(f"Nouvelle IP apprise (ARP) : {ip_src} -> {mac_src}")
 
 
-# ───────────────────────────────────────────────────────────
-#  UTILITAIRE : LISTE DES INTERFACES
-# ───────────────────────────────────────────────────────────
+# ==============================================================================
+# NETWORK SNIFFER (Couche Capture)
+# ==============================================================================
+class NetworkSniffer:
+    def __init__(self, config, rule_engine):
+        self.config = config
+        self.rule_engine = rule_engine
+        self.interface = self.config.get_general("interface") or None
+        self.packets_analyzed = 0
 
-def lister_interfaces():
-    """Affiche toutes les interfaces réseau disponibles."""
-    print("\n" + "=" * 48)
-    print("   Interfaces reseau disponibles")
-    print("=" * 48 + "\n")
-    for i, iface in enumerate(get_if_list(), 1):
-        marker = "  ← (défaut)" if iface == conf.iface else ""
-        print(f"  {i:2d}. {iface}{marker}")
-    print()
+    def start(self):
+        print(f"\n{'=' * 60}")
+        print("  🚀 IDS RÉSEAU PRO -- Moteur d'Analyse (OOP)")
+        print(f"{'=' * 60}")
+        
+        iface_display = self.interface if self.interface else conf.iface
+        print(f"  Interface d'écoute : {iface_display}")
+        print("  Règles actives :")
+        for rule in ["port_scan", "syn_flood", "icmp_flood", "udp_flood", "arp_spoofing"]:
+            status = "Actif" if self.config.get_rule(rule).get("enabled", False) else "Inactif"
+            print(f"    - {rule.replace('_', ' ').title().ljust(20)} : {status}")
+        print(f"{'=' * 60}\n")
+        print("  En attente de paquets (Appuyez sur Ctrl+C pour arrêter)...\n")
+        
+        try:
+            sniff(prn=self._process_packet, iface=self.interface, store=False)
+        except KeyboardInterrupt:
+            self.stop()
+        except PermissionError:
+            print("\n[ERREUR] Privilèges administrateur requis pour capturer le trafic.")
+            print("Veuillez relancer le script en tant qu'Administrateur.\n")
+            sys.exit(1)
 
+    def _process_packet(self, packet):
+        self.packets_analyzed += 1
+        self.rule_engine.analyze_packet(packet)
 
-# ───────────────────────────────────────────────────────────
-#  POINT D'ENTRÉE
-# ───────────────────────────────────────────────────────────
-
-def main():
-    global SEUIL_PORTS, SEUIL_SYN
-
-    parser = argparse.ArgumentParser(
-        description="🛡️ IDS Réseau — Système de Détection d'Intrusion Léger",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Exemples :
-  python ids_detecteur.py                     Interface par défaut
-  python ids_detecteur.py -i "Wi-Fi"          Interface Wi-Fi
-  python ids_detecteur.py --list-interfaces   Lister les interfaces
-  python ids_detecteur.py --seuil-scan 10     Seuil scan abaissé (démo)
-        """
-    )
-    parser.add_argument(
-        "-i", "--interface", default=None,
-        help="Nom de l'interface réseau à surveiller (défaut: auto-détection)"
-    )
-    parser.add_argument(
-        "--list-interfaces", action="store_true",
-        help="Liste les interfaces réseau disponibles et quitte"
-    )
-    parser.add_argument(
-        "--seuil-scan", type=int, default=SEUIL_PORTS,
-        help=f"Seuil de ports distincts pour alerte scan (défaut: {SEUIL_PORTS})"
-    )
-    parser.add_argument(
-        "--seuil-flood", type=int, default=SEUIL_SYN,
-        help=f"Seuil de SYN pour alerte flood (défaut: {SEUIL_SYN})"
-    )
-
-    args = parser.parse_args()
-
-    if args.list_interfaces:
-        lister_interfaces()
-        sys.exit(0)
-
-    interface = args.interface or conf.iface
-    SEUIL_PORTS = args.seuil_scan
-    SEUIL_SYN = args.seuil_flood
-
-    import sys
-    sys.stdout.reconfigure(encoding="utf-8")
-
-    # --- Banniere de demarrage ---
-    print()
-    print("=" * 58)
-    print("   IDS RESEAU -- Systeme de Detection d'Intrusion")
-    print("=" * 58)
-    print(f"  Interface  : {interface}")
-    print(f"  Scan       : {SEUIL_PORTS} ports distincts en {FENETRE_SCAN}s")
-    print(f"  Flood      : {SEUIL_SYN} SYN en {FENETRE_FLOOD}s")
-    print(f"  ARP        : detection par table de reference")
-    print(f"  Cooldown   : {COOLDOWN_ALERTE}s")
-    print(f"  Log texte  : logs/ids_alertes.log")
-    print(f"  Log JSON   : logs/ids_alertes.jsonl")
-    print("=" * 58)
-    print("\n  En attente de paquets...\n")
-
-    logging.info(f"Démarrage de l'IDS sur {interface}")
-
-    try:
-        sniff(prn=analyser_paquet, iface=interface, store=False)
-    except KeyboardInterrupt:
+    def stop(self):
         print(f"\n\n{'=' * 50}")
-        print("  Statistiques de session")
+        print("  📊 Statistiques de session IDS")
         print(f"{'=' * 50}")
-        print(f"  Paquets analyses : {stats['paquets_analyses']}")
-        print(f"  Alertes totales  : {stats['total']}")
-        print(f"    Scans          : {stats['scans']}")
-        print(f"    Floods         : {stats['floods']}")
-        print(f"    ARP spoofing   : {stats['arp_spoofing']}")
-        print(f"\n  IDS arrete proprement.\n")
-    except PermissionError:
-        print("\nErreur : Privileges administrateur requis.")
-        print("   Lancez le terminal en tant qu'administrateur.\n")
-        sys.exit(1)
+        print(f"  Paquets analysés : {self.packets_analyzed}")
+        stats = self.rule_engine.alert_manager.stats
+        print(f"  Alertes totales  : {stats['total_alerts']}")
+        print(f"    - Port Scan    : {stats['port_scan']}")
+        print(f"    - SYN Flood    : {stats['syn_flood']}")
+        print(f"    - ICMP Flood   : {stats['icmp_flood']}")
+        print(f"    - UDP Flood    : {stats['udp_flood']}")
+        print(f"    - ARP Spoofing : {stats['arp_spoofing']}")
+        print(f"\n  Fermeture de l'IDS... Terminé.\n")
 
+
+# ==============================================================================
+# ENTRY POINT
+# ==============================================================================
+def main():
+    # 1. Charger la configuration
+    config = ConfigManager("config.yaml")
+    
+    # 2. Initialiser le gestionnaire d'alertes
+    alert_manager = AlertManager(config)
+    
+    # 3. Initialiser le moteur de règles
+    rule_engine = RuleEngine(config, alert_manager)
+    
+    # 4. Lancer le sniffer
+    sniffer = NetworkSniffer(config, rule_engine)
+    sniffer.start()
 
 if __name__ == "__main__":
     main()

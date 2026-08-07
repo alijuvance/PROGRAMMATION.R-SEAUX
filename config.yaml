@@ -1,0 +1,56 @@
+# ==========================================
+# CONFIGURATION IDS RÉSEAU
+# ==========================================
+
+# ------------------------------------------
+# PARAMÈTRES GÉNÉRAUX
+# ------------------------------------------
+general:
+  # Laissez vide ("") pour auto-détecter l'interface par défaut
+  interface: ""
+  # Temps d'attente (en secondes) avant de déclencher une nouvelle alerte du même type pour la même IP
+  cooldown_alerte: 30
+
+# ------------------------------------------
+# SEUILS DE DÉTECTION (RÈGLES)
+# ------------------------------------------
+rules:
+  # Règle 1 : Scan de Ports (Reconnaissance)
+  port_scan:
+    enabled: true
+    window_seconds: 10
+    threshold_distinct_ports: 15
+
+  # Règle 2 : SYN Flood (Déni de Service TCP)
+  syn_flood:
+    enabled: true
+    window_seconds: 5
+    threshold_syn_count: 50
+
+  # Règle 3 : ICMP Ping Flood (Déni de Service ICMP)
+  icmp_flood:
+    enabled: true
+    window_seconds: 5
+    threshold_ping_count: 50
+
+  # Règle 4 : UDP Flood (Déni de Service UDP)
+  udp_flood:
+    enabled: true
+    window_seconds: 5
+    threshold_udp_count: 100
+
+  # Règle 5 : ARP Spoofing (Man-in-the-Middle)
+  arp_spoofing:
+    enabled: true
+
+# ------------------------------------------
+# ENREGISTREMENT ET FORENSIQUE
+# ------------------------------------------
+logging:
+  log_file_text: "logs/ids_alertes.log"
+  log_file_json: "logs/ids_alertes.jsonl"
+  
+forensics:
+  # Sauvegarder les paquets suspects dans un fichier .pcap (Wireshark)
+  pcap_export_enabled: true
+  pcap_export_dir: "logs/pcap_exports"
