@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IDS Réseau — Dashboard</title>
-    <meta name="description" content="Dashboard temps réel pour le système de détection d'intrusion réseau">
-    <link rel="stylesheet" href="/static/style.css?v=2">
+    <title>IDS Réseau — Dashboard Pro</title>
+    <meta name="description" content="Dashboard temps réel et historique pour le système de détection d'intrusion réseau">
+    <link rel="stylesheet" href="/static/style.css?v=3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet"/>
 </head>
 <body>
 
@@ -17,49 +18,22 @@
     <header id="main-header">
         <div class="header-left">
             <div class="logo">
-                <svg class="logo-svg" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" stroke="url(#grad)" fill="url(#grad-fill)"/>
-                    <defs>
-                        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="#0ea5e9"/>
-                            <stop offset="100%" stop-color="#6366f1"/>
-                        </linearGradient>
-                        <linearGradient id="grad-fill" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stop-color="rgba(14,165,233,0.15)"/>
-                            <stop offset="100%" stop-color="rgba(99,102,241,0.08)"/>
-                        </linearGradient>
-                    </defs>
-                </svg>
+                <i class="ri-shield-check-fill logo-icon"></i>
                 <div class="logo-text">
-                    <h1>IDS RÉSEAU</h1>
+                    <h1>IDS RÉSEAU <span class="badge-pro">PRO</span></h1>
                 </div>
             </div>
-        </div>
-
-        <!-- Inline Stats -->
-        <div class="header-stats">
-            <div class="header-stat">
-                <span class="header-stat-value" id="h-stat-total">0</span>
-                <span class="header-stat-label">INCIDENTS</span>
-            </div>
-            <div class="header-stat-divider"></div>
-            <div class="header-stat">
-                <span class="header-stat-value scan-color" id="h-stat-scans">0</span>
-                <span class="header-stat-label">SCANS</span>
-            </div>
-            <div class="header-stat-divider"></div>
-            <div class="header-stat">
-                <span class="header-stat-value flood-color" id="h-stat-floods">0</span>
-                <span class="header-stat-label">FLOODS</span>
-            </div>
-            <div class="header-stat-divider"></div>
-            <div class="header-stat">
-                <span class="header-stat-value arp-color" id="h-stat-arp">0</span>
-                <span class="header-stat-label">ARP SPOOF</span>
-            </div>
+            
+            <nav class="header-nav">
+                <button class="nav-btn active" id="tab-live" onclick="switchTab('live')"><i class="ri-pulse-line"></i> Live Feed</button>
+                <button class="nav-btn" id="tab-history" onclick="switchTab('history')"><i class="ri-history-line"></i> Historique</button>
+            </nav>
         </div>
 
         <div class="header-right">
+            <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Basculer le thème">
+                <i class="ri-sun-line"></i>
+            </button>
             <div class="connection-badge" id="connection-status">
                 <span class="conn-dot"></span>
                 <span class="conn-text">CONNEXION...</span>
@@ -68,112 +42,130 @@
         </div>
     </header>
 
-    <!-- ══════════ BENTO GRID ══════════ -->
-    <main class="bento-grid">
-
-        <!-- ── CARD: Alert Feed ── -->
-        <section class="bento-card feed-card" id="feed-card">
-            <div class="card-header">
-                <h2>Live Incident Feed</h2>
-                <div class="live-indicator">
-                    <span class="live-pulse"></span>
-                    LIVE
-                </div>
-            </div>
-            <div class="alerts-feed" id="alerts-feed">
-                <div class="empty-state" id="empty-state">
-                    <div class="scanner-anim">
-                        <div class="scanner-line"></div>
-                    </div>
-                    <p class="empty-title">Scanning network...</p>
-                    <p class="empty-sub">Waiting for suspicious activity</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── CARD: Activity Chart ── -->
-        <div class="bento-card chart-card">
-            <div class="card-header">
-                <h2>Activity Timeline</h2>
-                <span class="card-badge">30 min</span>
-            </div>
-            <div class="chart-container">
-                <canvas id="activityChart"></canvas>
-            </div>
+    <!-- ══════════ STATS BAR (Always visible) ══════════ -->
+    <div class="stats-bar">
+        <div class="header-stat">
+            <span class="header-stat-value" id="h-stat-total">0</span>
+            <span class="header-stat-label">TOTAL INCIDENTS</span>
         </div>
-
-        <!-- ── CARD: Distribution Donut ── -->
-        <div class="bento-card donut-card">
-            <div class="card-header">
-                <h2>Threat Distribution</h2>
-            </div>
-            <div class="donut-container">
-                <canvas id="donutChart"></canvas>
-            </div>
-            <div class="donut-legend" id="donut-legend">
-                <div class="legend-item"><span class="legend-dot scan-bg"></span>Port Scan</div>
-                <div class="legend-item"><span class="legend-dot flood-bg"></span>SYN Flood</div>
-                <div class="legend-item"><span class="legend-dot arp-bg"></span>ARP Spoof</div>
-            </div>
+        <div class="header-stat-divider"></div>
+        <div class="header-stat">
+            <span class="header-stat-value scan-color" id="h-stat-scans">0</span>
+            <span class="header-stat-label">SCANS</span>
         </div>
-
-        <!-- ── CARD: Top IPs ── -->
-        <div class="bento-card ips-card">
-            <div class="card-header">
-                <h2>Top Threat Sources</h2>
-            </div>
-            <div class="top-ips-list" id="top-ips-list">
-                <div class="empty-ips">No threats detected yet</div>
-            </div>
+        <div class="header-stat-divider"></div>
+        <div class="header-stat">
+            <span class="header-stat-value flood-color" id="h-stat-floods">0</span>
+            <span class="header-stat-label">FLOODS</span>
         </div>
+        <div class="header-stat-divider"></div>
+        <div class="header-stat">
+            <span class="header-stat-value arp-color" id="h-stat-arp">0</span>
+            <span class="header-stat-label">ARP SPOOF</span>
+        </div>
+    </div>
 
-        <!-- ── CARD: Detection Rules ── -->
-        <div class="bento-card rules-card">
-            <div class="card-header">
-                <h2>Active Rules</h2>
+    <!-- ══════════ TAB: LIVE (BENTO GRID) ══════════ -->
+    <main class="tab-content active" id="content-live">
+        <div class="bento-grid">
+            <!-- ── CARD: Alert Feed ── -->
+            <section class="bento-card feed-card" id="feed-card">
+                <div class="card-header">
+                    <h2>Live Incident Feed</h2>
+                    <div class="live-indicator">
+                        <span class="live-pulse"></span>
+                        LIVE
+                    </div>
+                </div>
+                <div class="alerts-feed" id="alerts-feed">
+                    <div class="empty-state" id="empty-state">
+                        <i class="ri-radar-line empty-icon"></i>
+                        <p class="empty-title">Réseau sécurisé</p>
+                        <p class="empty-sub">En attente d'activité suspecte...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── CARD: Activity Chart ── -->
+            <div class="bento-card chart-card">
+                <div class="card-header">
+                    <h2>Timeline (30 min)</h2>
+                </div>
+                <div class="chart-container">
+                    <canvas id="activityChart"></canvas>
+                </div>
             </div>
-            <div class="rules-list">
-                <div class="rule-row">
-                    <div class="rule-indicator scan-bg"></div>
-                    <div class="rule-info">
-                        <span class="rule-name">Port Scan Detection</span>
-                        <span class="rule-detail">&ge;15 distinct ports / 10s window</span>
-                    </div>
-                    <span class="rule-status active">ON</span>
+
+            <!-- ── CARD: Distribution Donut ── -->
+            <div class="bento-card donut-card">
+                <div class="card-header">
+                    <h2>Répartition</h2>
                 </div>
-                <div class="rule-row">
-                    <div class="rule-indicator flood-bg"></div>
-                    <div class="rule-info">
-                        <span class="rule-name">SYN Flood Detection</span>
-                        <span class="rule-detail">&ge;50 SYN packets / 5s window</span>
-                    </div>
-                    <span class="rule-status active">ON</span>
+                <div class="donut-container">
+                    <canvas id="donutChart"></canvas>
                 </div>
-                <div class="rule-row">
-                    <div class="rule-indicator arp-bg"></div>
-                    <div class="rule-info">
-                        <span class="rule-name">ARP Spoofing Detection</span>
-                        <span class="rule-detail">MAC address change for known IP</span>
-                    </div>
-                    <span class="rule-status active">ON</span>
+                <div class="donut-legend" id="donut-legend">
+                    <div class="legend-item"><span class="legend-dot scan-bg"></span>Port Scan</div>
+                    <div class="legend-item"><span class="legend-dot flood-bg"></span>Floods (SYN/ICMP/UDP)</div>
+                    <div class="legend-item"><span class="legend-dot arp-bg"></span>ARP Spoof</div>
+                </div>
+            </div>
+
+            <!-- ── CARD: Top IPs ── -->
+            <div class="bento-card ips-card">
+                <div class="card-header">
+                    <h2>Top Sources (Attaquants)</h2>
+                </div>
+                <div class="top-ips-list" id="top-ips-list">
+                    <div class="empty-ips">Aucune menace détectée</div>
                 </div>
             </div>
         </div>
+    </main>
 
+    <!-- ══════════ TAB: HISTORY (DATATABLE) ══════════ -->
+    <main class="tab-content" id="content-history">
+        <div class="bento-card full-width">
+            <div class="card-header">
+                <h2>Base de données (SQLite)</h2>
+                <div class="card-actions">
+                    <button class="btn-primary" onclick="window.location.href='/api/export/csv'">
+                        <i class="ri-file-download-line"></i> Exporter CSV
+                    </button>
+                    <button class="btn-secondary" onclick="loadHistory()">
+                        <i class="ri-refresh-line"></i> Actualiser
+                    </button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th># ID</th>
+                            <th>Date & Heure</th>
+                            <th>Type</th>
+                            <th>Sévérité</th>
+                            <th>IP Source</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-tbody">
+                        <tr><td colspan="6" class="text-center">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </main>
 
     <!-- ══════════ FOOTER ══════════ -->
     <footer>
-        <span>IDS Réseau v1.0</span>
+        <span>IDS Réseau PRO v2.0</span>
         <span class="footer-sep">&middot;</span>
-        <span>Projet Programmation Réseaux</span>
+        <span>Système de Détection d'Intrusion & Forensique</span>
     </footer>
 
     <!-- ══════════ JAVASCRIPT ══════════ -->
     <script>
-    (function() {
-        'use strict';
-
         const socket = io();
         const connDot = document.querySelector('.conn-dot');
         const connText = document.querySelector('.conn-text');
@@ -182,32 +174,69 @@
         let chartLabels = [];
         let activityChart = null;
         let donutChart = null;
-        let localStats = { total: 0, scans: 0, floods: 0, arp_spoofing: 0 };
 
-        // ─── Chart Labels ───
+        // ─── THEME TOGGLE ───
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.querySelector('#theme-toggle i');
+            if (html.getAttribute('data-theme') === 'dark') {
+                html.setAttribute('data-theme', 'light');
+                icon.className = 'ri-moon-line';
+            } else {
+                html.setAttribute('data-theme', 'dark');
+                icon.className = 'ri-sun-line';
+            }
+        }
+
+        // ─── TABS ───
+        function switchTab(tabId) {
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.getElementById('tab-' + tabId).classList.add('active');
+            document.getElementById('content-' + tabId).classList.add('active');
+            
+            if(tabId === 'history') {
+                loadHistory();
+            }
+        }
+
+        // ─── CHARTS INIT ───
         function initChartLabels() {
             const now = new Date();
             chartLabels = [];
             for (let i = 29; i >= 0; i--) {
                 const d = new Date(now.getTime() - i * 60000);
-                chartLabels.push(d.getHours().toString().padStart(2,'0') + ':' +
-                               d.getMinutes().toString().padStart(2,'0'));
+                chartLabels.push(d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'));
             }
         }
 
-        // ─── Line Chart ───
-        function initLineChart() {
-            initChartLabels();
-            const ctx = document.getElementById('activityChart').getContext('2d');
-            const gradient = ctx.createLinearGradient(0, 0, 0, 180);
-            gradient.addColorStop(0, 'rgba(14, 165, 233, 0.2)');
-            gradient.addColorStop(1, 'rgba(14, 165, 233, 0)');
+        function getChartColors() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            return {
+                text: isDark ? '#9ca3af' : '#4b5563',
+                grid: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+            };
+        }
 
-            activityChart = new Chart(ctx, {
+        function initCharts() {
+            initChartLabels();
+            const colors = getChartColors();
+            Chart.defaults.color = colors.text;
+            Chart.defaults.font.family = "'Inter', sans-serif";
+
+            // Activity Line Chart
+            const ctxActivity = document.getElementById('activityChart').getContext('2d');
+            let gradient = ctxActivity.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(14, 165, 233, 0.5)');
+            gradient.addColorStop(1, 'rgba(14, 165, 233, 0.0)');
+
+            activityChart = new Chart(ctxActivity, {
                 type: 'line',
                 data: {
                     labels: chartLabels,
                     datasets: [{
+                        label: 'Incidents / min',
                         data: chartData,
                         borderColor: '#0ea5e9',
                         backgroundColor: gradient,
@@ -215,249 +244,172 @@
                         fill: true,
                         tension: 0.4,
                         pointRadius: 0,
-                        pointHoverRadius: 3,
-                        pointHoverBackgroundColor: '#0ea5e9'
+                        pointHitRadius: 10
                     }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(8, 12, 21, 0.95)',
-                            titleColor: '#94a3b8',
-                            bodyColor: '#e2e8f0',
-                            borderColor: 'rgba(14,165,233,0.2)',
-                            borderWidth: 1,
-                            padding: 10,
-                            displayColors: false,
-                            titleFont: { family: 'JetBrains Mono', size: 10 },
-                            bodyFont: { family: 'JetBrains Mono', size: 12 }
-                        }
-                    },
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
                     scales: {
-                        x: { ticks: { color: '#334155', maxTicksLimit: 6, font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: 'rgba(51,65,85,0.1)' }, border: { display: false } },
-                        y: { beginAtZero: true, ticks: { color: '#334155', stepSize: 1, font: { family: 'JetBrains Mono', size: 9 } }, grid: { color: 'rgba(51,65,85,0.1)' }, border: { display: false } }
-                    },
-                    interaction: { intersect: false, mode: 'index' }
-                }
-            });
-        }
-
-        // ─── Donut Chart ───
-        function initDonutChart() {
-            const ctx = document.getElementById('donutChart').getContext('2d');
-            donutChart = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Port Scan', 'SYN Flood', 'ARP Spoof'],
-                    datasets: [{
-                        data: [0, 0, 0],
-                        backgroundColor: ['#f59e0b', '#ef4444', '#a855f7'],
-                        borderColor: 'transparent',
-                        borderWidth: 0,
-                        spacing: 3,
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '72%',
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(8,12,21,0.95)',
-                            titleColor: '#94a3b8',
-                            bodyColor: '#e2e8f0',
-                            borderColor: 'rgba(14,165,233,0.2)',
-                            borderWidth: 1,
-                            padding: 10,
-                            bodyFont: { family: 'JetBrains Mono', size: 12 }
-                        }
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+                        y: { beginAtZero: true, grid: { color: colors.grid, drawBorder: false }, ticks: { stepSize: 1 } }
                     }
                 }
             });
+
+            // Donut Chart
+            const ctxDonut = document.getElementById('donutChart').getContext('2d');
+            donutChart = new Chart(ctxDonut, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Port Scan', 'Floods', 'ARP Spoofing'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#eab308', '#ef4444', '#a855f7'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '75%',
+                    plugins: { legend: { display: false } }
+                }
+            });
         }
 
-        function updateDonut(stats) {
-            if (!donutChart) return;
-            const s = stats.scans || 0;
-            const f = stats.floods || 0;
-            const a = stats.arp_spoofing || 0;
-            if (s + f + a === 0) {
-                donutChart.data.datasets[0].data = [1, 1, 1];
-                donutChart.data.datasets[0].backgroundColor = ['#1e293b','#1e293b','#1e293b'];
-            } else {
-                donutChart.data.datasets[0].data = [s, f, a];
-                donutChart.data.datasets[0].backgroundColor = ['#f59e0b','#ef4444','#a855f7'];
-            }
+        function updateCharts(stats) {
+            chartData.shift();
+            chartData.push(stats.total_recent || 0); // Note: For a real 30-min window, this needs server-side bucketing, keeping it simple
+            activityChart.update();
+            donutChart.data.datasets[0].data = [stats.scans, stats.floods, stats.arp_spoofing];
             donutChart.update();
         }
 
-        // ─── Animated Counter ───
-        function animateValue(el, newValue) {
-            const current = parseInt(el.textContent) || 0;
-            if (current === newValue) return;
-            const duration = 400;
-            const start = performance.now();
-            function tick(ts) {
-                const p = Math.min((ts - start) / duration, 1);
-                const eased = 1 - Math.pow(1 - p, 3);
-                el.textContent = Math.round(current + (newValue - current) * eased);
-                if (p < 1) requestAnimationFrame(tick);
-            }
-            requestAnimationFrame(tick);
+        // ─── UI UPDATES ───
+        function updateStatsUI(stats) {
+            document.getElementById('h-stat-total').innerText = stats.total || 0;
+            document.getElementById('h-stat-scans').innerText = stats.scans || 0;
+            document.getElementById('h-stat-floods').innerText = stats.floods || 0;
+            document.getElementById('h-stat-arp').innerText = stats.arp_spoofing || 0;
         }
 
-        function updateStats(stats) {
-            localStats = { ...stats };
-            animateValue(document.getElementById('h-stat-total'), stats.total);
-            animateValue(document.getElementById('h-stat-scans'), stats.scans);
-            animateValue(document.getElementById('h-stat-floods'), stats.floods);
-            animateValue(document.getElementById('h-stat-arp'), stats.arp_spoofing);
-            updateDonut(stats);
-        }
-
-        // ─── Alert Card ───
-        function createAlertCard(alert, animate) {
-            const div = document.createElement('div');
-            let cls = 'scan', label = 'SCAN';
-            if (alert.type === 'FLOOD') { cls = 'flood'; label = 'FLOOD'; }
-            else if (alert.type === 'ARP_SPOOF') { cls = 'arp'; label = 'ARP'; }
-
-            div.className = 'alert-row' + (animate ? ' alert-anim' : '');
-            div.innerHTML = `
-                <div class="alert-dot ${cls}-bg"></div>
-                <div class="alert-body">
-                    <div class="alert-top">
-                        <span class="alert-tag ${cls}-tag">${label}</span>
-                        <span class="alert-ts">${alert.timestamp.split(' ')[1] || alert.timestamp}</span>
-                    </div>
-                    <div class="alert-msg">${escapeHtml(alert.message)}</div>
-                    <div class="alert-src">${alert.ip}</div>
-                </div>
-            `;
-            return div;
-        }
-
-        function escapeHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
-
-        function addAlert(alert, animate) {
-            const feed = document.getElementById('alerts-feed');
-            const empty = document.getElementById('empty-state');
-            if (empty) empty.style.display = 'none';
-
-            const card = createAlertCard(alert, animate);
-            feed.insertBefore(card, feed.firstChild);
-            while (feed.children.length > 150) feed.removeChild(feed.lastChild);
-
-            if (animate) {
-                let cardId = 'feed-card';
-                const el = document.getElementById(cardId);
-                el.classList.add('card-pulse');
-                setTimeout(() => el.classList.remove('card-pulse'), 600);
-            }
-        }
-
-        // ─── Top IPs ───
-        function updateTopIPs(topIps) {
-            const c = document.getElementById('top-ips-list');
+        function updateTopIps(topIps) {
+            const list = document.getElementById('top-ips-list');
             if (!topIps || topIps.length === 0) {
-                c.innerHTML = '<div class="empty-ips">No threats detected yet</div>';
+                list.innerHTML = '<div class="empty-ips">Aucune menace détectée</div>';
                 return;
             }
-            const max = topIps[0].count;
-            c.innerHTML = topIps.map((item, i) => `
+            list.innerHTML = topIps.map((item, idx) => `
                 <div class="ip-row">
-                    <span class="ip-rank">${i + 1}</span>
-                    <span class="ip-addr">${item.ip}</span>
-                    <div class="ip-bar-wrap">
-                        <div class="ip-bar-fill" style="width:${(item.count/max)*100}%"></div>
-                    </div>
-                    <span class="ip-cnt">${item.count}</span>
+                    <div class="ip-rank">#${idx + 1}</div>
+                    <div class="ip-addr">${item.ip}</div>
+                    <div class="ip-count">${item.count} <span class="text-muted">alertes</span></div>
                 </div>
             `).join('');
         }
 
-        // ─── Chart Update ───
-        function updateChart() {
-            if (!activityChart) return;
-            chartData[chartData.length - 1]++;
-            activityChart.update('none');
+        function addAlertToFeed(alert) {
+            const feed = document.getElementById('alerts-feed');
+            document.getElementById('empty-state').style.display = 'none';
+
+            let typeClass = 'scan';
+            let icon = 'ri-search-eye-line';
+            if (alert.type.includes('FLOOD')) { typeClass = 'flood'; icon = 'ri-flood-fill'; }
+            if (alert.type === 'ARP_SPOOFING') { typeClass = 'arp'; icon = 'ri-spy-fill'; }
+
+            const el = document.createElement('div');
+            el.className = `alert-item ${typeClass}`;
+            
+            const timeOnly = alert.timestamp.split(' ')[1] || alert.timestamp;
+            
+            el.innerHTML = `
+                <div class="alert-icon"><i class="${icon}"></i></div>
+                <div class="alert-content">
+                    <div class="alert-header">
+                        <span class="alert-type">${alert.type.replace('_', ' ')}</span>
+                        <span class="alert-time">${timeOnly}</span>
+                    </div>
+                    <div class="alert-message">${alert.message}</div>
+                    <div class="alert-source">Source: <span class="source-ip">${alert.ip}</span></div>
+                </div>
+            `;
+            
+            feed.insertBefore(el, feed.firstChild);
+            if (feed.children.length > 50) feed.lastChild.remove();
         }
 
-        setInterval(function() {
-            chartData.shift(); chartData.push(0);
+        function updateClock() {
             const now = new Date();
-            chartLabels.shift();
-            chartLabels.push(now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0'));
-            if (activityChart) { activityChart.data.labels = chartLabels; activityChart.update('none'); }
-        }, 60000);
-
-        // ─── Clock ───
-        function tick() {
-            document.getElementById('header-time').textContent = new Date().toLocaleTimeString('fr-FR');
-        }
-        setInterval(tick, 1000); tick();
-
-        // ─── Sound ───
-        function beep() {
-            try {
-                const a = new (window.AudioContext || window.webkitAudioContext)();
-                const o = a.createOscillator(); const g = a.createGain();
-                o.connect(g); g.connect(a.destination);
-                o.frequency.setValueAtTime(700, a.currentTime);
-                o.frequency.exponentialRampToValueAtTime(350, a.currentTime + 0.12);
-                g.gain.setValueAtTime(0.06, a.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.25);
-                o.start(a.currentTime); o.stop(a.currentTime + 0.25);
-            } catch(e) {}
+            document.getElementById('header-time').innerText = now.toLocaleTimeString('fr-FR');
         }
 
-        // ═══════════ WEBSOCKET ═══════════
-
-        socket.on('connect', function() {
-            connDot.className = 'conn-dot online';
-            connText.textContent = 'ONLINE';
-        });
-        socket.on('disconnect', function() {
-            connDot.className = 'conn-dot offline';
-            connText.textContent = 'OFFLINE';
-        });
-
-        socket.on('init', function(data) {
-            updateStats(data.stats);
-            updateTopIPs(data.top_ips);
-            if (data.alerts && data.alerts.length > 0) {
-                [...data.alerts].reverse().forEach(a => addAlert(a, false));
-                rebuildChart(data.alerts);
-            }
-        });
-
-        socket.on('new_alert', function(data) {
-            addAlert(data.alert, true);
-            updateStats(data.stats);
-            updateTopIPs(data.top_ips);
-            updateChart();
-            beep();
-        });
-
-        function rebuildChart(alerts) {
-            const now = new Date();
-            chartData = new Array(30).fill(0);
-            alerts.forEach(a => {
-                const diff = Math.floor((now - new Date(a.timestamp)) / 60000);
-                if (diff >= 0 && diff < 30) chartData[29 - diff]++;
-            });
-            if (activityChart) { activityChart.data.datasets[0].data = chartData; activityChart.update(); }
+        // ─── HISTORY DATA ───
+        function loadHistory() {
+            const tbody = document.getElementById('history-tbody');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center"><i class="ri-loader-4-line spin"></i> Chargement...</td></tr>';
+            
+            fetch('/api/history')
+                .then(r => r.json())
+                .then(data => {
+                    if(data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Aucune donnée historique.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.map(row => {
+                        let sevClass = row.severity === 'CRITICAL' ? 'text-red' : 'text-yellow';
+                        return `
+                            <tr>
+                                <td class="text-muted">#${row.id}</td>
+                                <td>${row.timestamp}</td>
+                                <td class="bold">${row.type}</td>
+                                <td class="${sevClass}">${row.severity}</td>
+                                <td class="font-mono">${row.ip}</td>
+                                <td>${row.message}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                });
         }
 
-        // ─── Init ───
-        initLineChart();
-        initDonutChart();
+        // ─── SOCKET EVENTS ───
+        socket.on('connect', () => {
+            connDot.style.backgroundColor = '#10b981';
+            connText.innerText = 'CONNECTÉ';
+        });
 
-    })();
+        socket.on('disconnect', () => {
+            connDot.style.backgroundColor = '#ef4444';
+            connText.innerText = 'DÉCONNECTÉ';
+        });
+
+        socket.on('new_alert', (data) => {
+            addAlertToFeed(data.alert);
+            updateStatsUI(data.stats);
+            updateTopIps(data.top_ips);
+            updateCharts(data.stats);
+        });
+
+        // ─── INIT ───
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            setInterval(updateClock, 1000);
+            updateClock();
+
+            // Load initial API state
+            fetch('/api/stats')
+                .then(r => r.json())
+                .then(data => {
+                    updateStatsUI(data.stats);
+                    updateTopIps(data.top_ips);
+                });
+                
+            fetch('/api/alerts')
+                .then(r => r.json())
+                .then(data => {
+                    // Data is reverse ordered from SQLite (newest first)
+                    data.reverse().forEach(a => addAlertToFeed(a));
+                });
+        });
     </script>
 </body>
 </html>
