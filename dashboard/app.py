@@ -82,7 +82,16 @@ def get_recent_alerts(limit=50):
     c.execute('SELECT * FROM alerts ORDER BY id DESC LIMIT ?', (limit,))
     rows = c.fetchall()
     conn.close()
-    return [dict(row) for row in rows]
+    
+    parsed_rows = []
+    for row in rows:
+        d = dict(row)
+        try:
+            d["details"] = json.loads(d.get("details", "{}"))
+        except:
+            d["details"] = {}
+        parsed_rows.append(d)
+    return parsed_rows
 
 def get_stats_from_db():
     conn = sqlite3.connect(DB_PATH)

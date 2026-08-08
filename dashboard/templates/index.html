@@ -330,7 +330,11 @@
                         <span class="alert-time">${timeOnly}</span>
                     </div>
                     <div class="alert-message">${alert.message}</div>
-                    <div class="alert-source">Source: <span class="source-ip">${alert.ip}</span></div>
+                    <div class="alert-source">
+                        Source: <span class="source-ip">${alert.ip}</span>
+                        ${alert.details && alert.details.geo ? `<span class="geo-badge"><i class="ri-map-pin-line"></i> ${alert.details.geo.country} (${alert.details.geo.isp})</span>` : ''}
+                        ${alert.details && alert.details.action === "BLOCKED_BY_FIREWALL" ? `<span class="blocked-badge"><i class="ri-shield-cross-fill"></i> BLOCKED</span>` : ''}
+                    </div>
                 </div>
             `;
             
@@ -363,8 +367,14 @@
                                 <td>${row.timestamp}</td>
                                 <td class="bold">${row.type}</td>
                                 <td class="${sevClass}">${row.severity}</td>
-                                <td class="font-mono">${row.ip}</td>
-                                <td>${row.message}</td>
+                                <td class="font-mono">
+                                    ${row.ip}
+                                    ${row.details && row.details.geo ? `<br><small class="text-muted"><i class="ri-map-pin-line"></i> ${row.details.geo.country}</small>` : ''}
+                                </td>
+                                <td>
+                                    ${row.message}
+                                    ${row.details && row.details.action === "BLOCKED_BY_FIREWALL" ? `<br><span class="blocked-badge small"><i class="ri-shield-cross-fill"></i> FIREWALL BLOCKED</span>` : ''}
+                                </td>
                             </tr>
                         `;
                     }).join('');
