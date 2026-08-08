@@ -54,3 +54,14 @@ forensics:
   # Sauvegarder les paquets suspects dans un fichier .pcap (Wireshark)
   pcap_export_enabled: true
   pcap_export_dir: "logs/pcap_exports"
+
+# ------------------------------------------
+# ACTIVE DEFENSE (IPS) & THREAT INTEL
+# ------------------------------------------
+active_defense:
+  # Bloquer l'IP via le Pare-feu Windows si attaque CRITIQUE (Flood/Scan intense)
+  firewall_block_enabled: true
+  
+threat_intel:
+  # Géolocalisation automatique via IP-API (pour IPs publiques)
+  geoip_enabled: true

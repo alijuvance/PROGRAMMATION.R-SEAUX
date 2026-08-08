@@ -28,3 +28,23 @@
 2026-08-06 20:36:13 [WARNING] SCAN DE PORTS suspecté depuis 10.0.0.66 (15 ports distincts en 10s)
 2026-08-06 20:36:16 [WARNING] SYN FLOOD / DoS suspecté depuis 10.0.0.66 (50 SYN en 5s)
 2026-08-06 20:36:21 [WARNING] ARP SPOOFING : 192.168.1.182 était connue avec la MAC 00:11:22:33:44:55, mais on voit maintenant 02:11:22:33:44:55 !
+2026-08-06 21:24:25 [INFO] Nouvelle IP apprise (ARP) : 192.168.10.1 -> e0:e1:a9:73:56:6b
+2026-08-06 21:24:26 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (15 ports distincts en 10s)
+2026-08-06 21:24:28 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (50 SYN en 5s)
+2026-08-06 21:24:34 [INFO] Nouvelle IP apprise (ARP) : 192.168.10.113 -> 18:3d:2d:ef:ce:05
+2026-08-06 21:24:56 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (166 ports distincts en 10s)
+2026-08-06 21:24:58 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (210 SYN en 5s)
+2026-08-06 21:25:26 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (122 ports distincts en 10s)
+2026-08-06 21:25:28 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (124 SYN en 5s)
+2026-08-06 21:25:56 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (119 ports distincts en 10s)
+2026-08-06 21:25:58 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (137 SYN en 5s)
+2026-08-06 21:26:26 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (66 ports distincts en 10s)
+2026-08-06 21:26:29 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (57 SYN en 5s)
+2026-08-06 21:26:56 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (128 ports distincts en 10s)
+2026-08-06 21:26:59 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (177 SYN en 5s)
+2026-08-06 21:27:26 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (80 ports distincts en 10s)
+2026-08-06 21:27:30 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (50 SYN en 5s)
+2026-08-06 21:27:57 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (37 ports distincts en 10s)
+2026-08-06 21:28:00 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (60 SYN en 5s)
+2026-08-06 21:28:27 [WARNING] SCAN DE PORTS suspecté depuis 192.168.10.113 (27 ports distincts en 10s)
+2026-08-06 21:28:31 [WARNING] SYN FLOOD / DoS suspecté depuis 192.168.10.113 (66 SYN en 5s)

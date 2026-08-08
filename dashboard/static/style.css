@@ -490,3 +490,36 @@ footer {
 .scan-bg { background-color: var(--color-scan); }
 .flood-bg { background-color: var(--color-flood); }
 .arp-bg { background-color: var(--color-arp); }
+
+/* ── NEW BADGES ── */
+.geo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(14, 165, 233, 0.15);
+    color: var(--text-accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.blocked-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-flood);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    margin-left: 8px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.blocked-badge.small {
+    margin-left: 0;
+    margin-top: 4px;
+}

@@ -2,3 +2,4 @@ scapy
 flask
 flask-socketio
 pyyaml
+requests

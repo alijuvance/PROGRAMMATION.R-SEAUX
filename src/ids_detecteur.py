@@ -17,6 +17,8 @@ import sys
 import json
 import yaml
 import logging
+import requests
+import subprocess
 from datetime import datetime, timedelta
 from collections import defaultdict
 from scapy.all import sniff, IP, TCP, UDP, ICMP, ARP, wrpcap, conf
@@ -91,6 +93,19 @@ class AlertManager:
         # 2. Log texte (logging)
         logging.warning(f"[{type_alerte}] {message}")
         
+        # 2.5 - Geolocation & Active Defense
+        geo_info = self.geolocate_ip(ip_source)
+        is_blocked = False
+        if type_alerte in ["PORT_SCAN", "SYN_FLOOD", "ICMP_FLOOD", "UDP_FLOOD"]:
+            is_blocked = self.active_defense_block_ip(ip_source)
+            
+        if details is None:
+            details = {}
+        if geo_info:
+            details["geo"] = geo_info
+        if is_blocked:
+            details["action"] = "BLOCKED_BY_FIREWALL"
+
         # 3. Log JSONL (pour le Dashboard)
         alerte = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -98,7 +113,7 @@ class AlertManager:
             "severity": "CRITICAL" if type_alerte == "ARP_SPOOFING" else "WARNING",
             "ip": ip_source,
             "message": message,
-            "details": details or {}
+            "details": details
         }
         with open(self.log_json_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(alerte, ensure_ascii=False) + "\n")
@@ -120,6 +135,51 @@ class AlertManager:
         filename = f"{timestamp_str}_{type_alerte}_{ip_safe}.pcap"
         filepath = os.path.join(self.pcap_dir, filename)
         wrpcap(filepath, packet, append=True)
+
+    def active_defense_block_ip(self, ip_source):
+        """Bloque l'adresse IP de l'attaquant via le Pare-feu Windows (PowerShell)"""
+        if not self.config.config.get("active_defense", {}).get("firewall_block_enabled", False):
+            return False
+            
+        # Ne pas bloquer l'IP locale ou de loopback
+        if ip_source in ["127.0.0.1", "0.0.0.0", "255.255.255.255"]:
+            return False
+
+        rule_name = f"IDS_BLOCK_{ip_source}"
+        ps_command = f'New-NetFirewallRule -DisplayName "{rule_name}" -Direction Inbound -RemoteAddress {ip_source} -Action Block'
+        
+        try:
+            # Exécution silencieuse de la commande PowerShell
+            subprocess.run(["powershell", "-Command", ps_command], capture_output=True, text=True, check=True)
+            self.log_info(f"🛡️ DÉFENSE ACTIVE : L'adresse IP {ip_source} a été bloquée par le pare-feu Windows.")
+            return True
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Échec de la défense active pour {ip_source} : {e.stderr.strip()}")
+            return False
+            
+    def geolocate_ip(self, ip_source):
+        """Récupère les informations géographiques d'une IP (si publique)"""
+        if not self.config.config.get("threat_intel", {}).get("geoip_enabled", False):
+            return None
+            
+        # Ignorer les IP privées
+        if ip_source.startswith("192.168.") or ip_source.startswith("10.") or ip_source.startswith("172.") or ip_source == "127.0.0.1":
+            return {"country": "Local", "city": "Réseau Interne", "isp": "LAN"}
+            
+        try:
+            # Appel à l'API publique IP-API
+            response = requests.get(f"http://ip-api.com/json/{ip_source}", timeout=2)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success":
+                    return {
+                        "country": data.get("country"),
+                        "city": data.get("city"),
+                        "isp": data.get("isp")
+                    }
+        except requests.RequestException:
+            pass
+        return None
 
     def log_info(self, message):
         """Log informatif standard"""
